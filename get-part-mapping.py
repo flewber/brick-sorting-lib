@@ -230,7 +230,7 @@ for cat in all_category_objects_sorted:
         #     print("Warn: Duplicate part in multiple categories with different priorities.")
         #     print("Part: %s in both: %s and: %s categories" % (cat_part.id, cat.name, part_to_category_dict[TRANSLATION_PREFIXES[cat_part.naming_scheme] + cat_part.id]))
 
-        part_to_category_dict[TRANSLATION_PREFIXES[cat_part.naming_scheme] + cat_part.id] = cat.name
+        part_to_category_dict[TRANSLATION_PREFIXES[cat_part.naming_scheme] + str(cat_part.id)] = cat.name
         same_priority_parts.append(cat_part)
 
 # print(part_to_category_dict)
