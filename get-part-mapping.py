@@ -235,15 +235,5 @@ for cat in all_category_objects_sorted:
 
 # print(part_to_category_dict)
 
-'''
-next steps:
-- add support for RB colors
-- add support for BL colors
-- add support for user defining part objects to override defaults (volume multiplier & quantity)
-- design mechanism for mapping categories to bins (manual vs auto)
-- design mechanism for bins tracking contents, volume, quantity, etc
-- confirm that rejected parts get rejected AFTER rolling up parts from accepted_categories
-
-'''
     
     
