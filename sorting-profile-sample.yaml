@@ -1,0 +1,110 @@
+# Example user sorting-profile for Lego sorting machine
+# Allows users to define custom categories into which the machine will sort bricks.
+# See bottom of file for list of default categories available
+
+# used when a category's 'naming_scheme' field is not specified
+default_naming_scheme: Rebrickable
+
+sorting_profile:
+  custom_category_00:
+    # 0 is highest priority, numbers farther from zero are lower priority
+    priority: 1
+
+    # Supported Part Naming Schemes:
+    # Rebrickable, Bricklink, BrickOwl, BrickSet, LEGO
+    # naming Scheme is for parts & categories
+    naming_scheme: Rebrickable
+    
+    # only accept accepted_parts in accepted_colors AND accepted_categories in accepted_colors
+    # 'any' can be used in accepted_parts or accepted_colors. for example:
+    # accepted_parts = ['any'] with accepted_colors = ['blue'] would accept any blue part
+    # accepted_categories = ['Bricks'] with accepted_colors = ['any'] would accept any color part in the Bricks category
+
+    accepted_parts: [96489]
+    # accepted_colors: TODO
+    accepted_categories:
+    - Tiles
+
+    # # optionally limit the quanity of specific parts in this category. 
+    # # Any part not defined here will have unlimited quantities allowed.
+    # # max_part_quantities = [('part1_ID', quantity1),('part2_ID', quantity2),etc.]
+    # max_part_quantities: TODO
+
+    # optionally exclude specific parts OR specific colors
+    # This supercedes the accepted_ items such that
+    # any parts in both rejected_parts and accepted_parts will be REJECTED
+    # any parts in both rejected_parts and an accepted_category will be REJECTED
+    # any parts in both rejected_colors and accepted_colors will be REJECTED
+    # any parts in both rejected_colors and an accepted_category will be REJECTED
+    rejected_parts: [101645]
+    # rejected_colors: TODO
+
+  custom_category_01:
+    priority: 1
+    accepted_colors: Any
+    accepted_categories: 
+      - Bricks
+  
+  custom_category_02:
+    priority: 2
+    accpeted_parts: [3002]
+    naming_scheme: BrickLink
+    accepted_colors: Any
+    accepted_categories: 
+      - custom_category_03
+
+  custom_category_03:
+    priority: 2
+    accpeted_parts: [3004, 3001]
+    accepted_colors: Blue
+
+
+  custom_category_04:
+    priority: 3
+    accpeted_parts: [3004, 3001]
+    accepted_colors: Any
+    accepted_categories: 
+      - custom_category_03
+
+
+
+
+# Rebrickable Default Categories:
+#   - Baseplates                                        - Large Buildable Figures
+#   - Bricks Sloped                                     - "Belville, Scala and Fabuland"
+#   - "Duplo, Quatro and Primo"                         - Znap
+#   - Bricks Special                                    - Mechanical
+#   - Bricks Wedged                                     - Electronics
+#   - Containers                                        - Technic Axles
+#   - Technic Bricks                                    - Windscreens and Fuselage
+#   - Plates Special                                    - Clikits
+#   - Bricks                                            - Plates Angled
+#   - Technic Connectors                                - HO Scale
+#   - Minifigs                                          - Technic Beams
+#   - Plates                                            - Technic Gears
+#   - Tiles Special                                     - Technic Pins
+#   - Windows and Doors                                 - Technic Bushes
+#   - Gear Parts                                        - Technic Beams Special
+#   - "Hinges, Arms and Turntables"                     - Tools
+#   - Tiles                                             - "Non-Buildable Figures (Duplo, Fabuland, etc)"
+#   - Bricks Round and Cones                            - Stickers
+#   - Plates Round Curved and Dishes                    - Minifig Heads
+#   - Pneumatics                                        - Minifig Upper Body
+#   - Panels                                            - Minifig Lower Body
+#   - Other                                             - Minidoll Heads
+#   - "Technic Steering, Suspension and Engine"         - Minidoll Upper Body
+#   - Technic Special                                   - Minidoll Lower Body
+#   - Minifig Accessories                               - Minifig Headwear
+#   - Animals / Creatures                               - Modulex
+#   - Wheels and Tyres                                  - Tiles Round and Curved
+#   - Tubes and Hoses                                   - Projectiles / Launchers
+#   - "String, Bands and Reels"                         - Energy Effects
+#   - "Bars, Ladders and Fences"                        - Minifig Hipwear
+#   - Rock                                              - Minifig Neckwear
+#   - "Supports, Girders and Cranes"                    - Minifig Headwear Accessories
+#   - Transportation - Sea and Air                      - "Minifig Shields, Weapons, & Tools"
+#   - Transportation - Land                             - Animal / Creature Accessories
+#   - Bricks Curved                                     - Animal / Creature Body Parts
+#   - "Flags, Banners and Signs"                        - Plants & Trees
+#   - Magnets and Holders                               - Non-System Parts
+#   - Technic Panels                                    - Pen & Watch

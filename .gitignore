@@ -5,3 +5,5 @@ api-helpers.py
 *.xml
 *.yaml
 *.DS*
+
+!sorting-profile-sample.yaml

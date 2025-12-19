@@ -36,8 +36,9 @@ class category:
         self.all_parts =[]
 
 class part:
-    ID = ""                         # Part ID
-    naming_scheme = "BrickLink"     # naming scheme of Part ID
-    volume_multiplier = 1.0         # optionally, tune the volume per piece for more optimal bin packing
-    max_quantity = -1               # max quantity of this part that should accepted. -1 is unlimited quantity
-    price = -1                      # 
+    def __init__(self, id, naming_scheme, volume_multiplier = 1.0, max_quantity = -1, price = -1):
+        self.id = id                                # Part ID
+        self.naming_scheme = naming_scheme          # naming scheme of Part ID
+        self.volume_multiplier = volume_multiplier  # optionally, tune the volume per piece for more optimal bin packing
+        self.max_quantity = max_quantity            # max quantity of this part that should accepted. -1 is unlimited quantity
+        self.price = price                          # 
