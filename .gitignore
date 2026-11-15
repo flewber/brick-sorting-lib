@@ -1,9 +1,3 @@
-keys.py
-*.csv
-api-helpers.py
-*.json
-*.xml
-*.yaml
-*.DS*
-
-!sorting-profile-sample.yaml
+__pycache__/
+.venv/
+*.pyc
