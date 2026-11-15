@@ -47,9 +47,3 @@ per-part quantity limits.
 Needs only [uv](https://docs.astral.sh/uv/).
 
     uv run pytest
-
-## Older prototype
-
-`get-part-mapping.py` and `sorting_profile_lib.py` are the first
-prototype. They are superseded by the `brick_sorting` package and are
-kept for reference for now.
