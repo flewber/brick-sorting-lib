@@ -7,3 +7,6 @@ api-helpers.py
 *.DS*
 
 !sorting-profile-sample.yaml
+__pycache__/
+.venv/
+*.pyc
