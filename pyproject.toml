@@ -1,6 +1,6 @@
 [project]
 name = "brick-sorting"
-version = "0.1.0"
+version = "0.2.0"
 description = "Sorting profiles for brick sorting: which category does a part in a color belong to?"
 readme = "README.md"
 license = "MIT"
@@ -16,3 +16,5 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# A test that expects a profile warning says so.
+filterwarnings = ["error::brick_sorting.ProfileWarning"]

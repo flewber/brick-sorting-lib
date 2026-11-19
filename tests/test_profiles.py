@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from brick_sorting import CsvCatalog, ProfileError, compile_profile, load_profile
+from brick_sorting import CsvCatalog, EntryKey, Match, ProfileError, ProfileWarning, compile_profile, load_profile
 
 RED, BLUE, BLACK = 4, 1, 0
 
@@ -102,8 +102,8 @@ categories:
     assert r.category_of("3004", RED) == "everything brick"
 
 
-def test_same_priority_claiming_the_same_piece_is_an_error_with_an_example():
-    with pytest.raises(ProfileError, match="'a' and 'b'.*part 3001"):
+def test_equal_priorities_are_an_error_naming_both_and_a_free_number():
+    with pytest.raises(ProfileError, match="'a' and 'b' both have priority 2.*3 is free"):
         resolver("""
 categories:
   - name: a
@@ -115,8 +115,10 @@ categories:
 """)
 
 
-def test_same_priority_is_fine_when_colors_keep_them_apart():
-    r = resolver("""
+def test_equal_priorities_are_an_error_even_when_colors_keep_them_apart():
+    # Before 0.2.0 this was allowed, since no piece could go to both.
+    with pytest.raises(ProfileError, match="'red bricks' and 'blue bricks'.*4 is free"):
+        resolver("""
 categories:
   - name: red bricks
     priority: 2
@@ -124,10 +126,24 @@ categories:
   - name: blue bricks
     priority: 2
     accept: {part_categories: [Bricks], colors: [Blue]}
+  - name: plates
+    priority: 3
+    accept: {part_categories: [Plates]}
 """)
-    assert r.category_of("3001", BLUE) == "blue bricks"
 
 
+def test_at_most_one_category_may_leave_priority_out():
+    with pytest.raises(ProfileError, match="'a' and 'b' both have priority 256.*left out"):
+        resolver("""
+categories:
+  - name: a
+    accept: {parts: [3001]}
+  - name: b
+    accept: {parts: [3020]}
+""")
+
+
+@pytest.mark.filterwarnings("ignore:.*can never receive")
 def test_including_categories_in_any_order_and_through_a_diamond():
     r = resolver("""
 categories:
@@ -151,6 +167,7 @@ categories:
     assert r.category_of("3010", BLUE) == "left"
 
 
+@pytest.mark.filterwarnings("ignore:.*can never receive")
 def test_an_included_categorys_own_rejects_carry_over():
     r = resolver("""
 categories:
@@ -198,9 +215,11 @@ categories:
         ("categories:\n  - name: a\n    accept: {categories: [ghost]}", "'ghost'"),
         ("categories:\n  - name: a\n    accept: {parts: [1], colors: [Mauve]}", "no color 'Mauve'"),
         ("categories:\n  - name: a\n    accept: {parts: [1]}\n    reject: {parts: [1]}", "accepts no piece"),
+        ("categories:\n  - name: a\n    accept: {parts: [1], colors: [Red]}\n    reject: {colors: [4]}", "accepts no piece"),
         ("categories:\n  - name: a\n    accept: {set: \"9999-1\"}", "no set '9999-1'"),
     ],
 )
+@pytest.mark.filterwarnings("ignore::brick_sorting.ProfileWarning")
 def test_mistakes_are_refused_with_a_message_that_names_them(text, message):
     with pytest.raises(ProfileError, match=message):
         resolver(text)
@@ -223,7 +242,8 @@ categories:
 
 
 def test_set_category_accepts_exactly_the_sets_parts_in_the_sets_colors():
-    r = resolver("""
+    with pytest.warns(ProfileWarning, match="'my set'.*deprecated"):
+        r = resolver("""
 categories:
   - name: my set
     priority: 0
@@ -236,6 +256,20 @@ categories:
     assert r.category_of("3001", BLUE) == "bricks"
     assert r.category_of("3020", BLUE) == "my set"
     assert r.category_of("3020", RED) is None
+
+
+def test_deprecated_set_category_wants_the_sets_quantities():
+    with pytest.warns(ProfileWarning, match="Import the set as a 'list'"):
+        r = resolver("""
+categories:
+  - name: my set
+    priority: 0
+    accept: {set: "1234-1"}
+""")
+    assert r.entries("my set") == {EntryKey("3001", RED): 2, EntryKey("3020", BLUE): 1}
+    key = EntryKey("3001", RED)
+    assert r.match("3001", RED, lambda c, e: 1) == Match("my set", key)
+    assert r.match("3001", RED, lambda c, e: 0) is None
 
 
 def test_unknown_color_gets_an_answer_only_when_color_cannot_matter():
@@ -283,7 +317,11 @@ def test_sample_profile_loads_against_csv_files(tmp_path):
     r = compile_profile(load_profile(sample), CsvCatalog(tmp_path))
     assert r.category_of("3001", 4) == "bricks and tiles in red"
     assert r.category_of("3001", 1) == "blue 2x4 and 1x2 bricks"
-    assert r.category_of("3001", 0) is None
-    assert r.category_of("101645", 4) is None
+    assert r.category_of("3001", 0) == "parts for a build"
+    assert r.category_of("101645", 4) == "identified, not wanted"
     assert r.category_of("3070b", 0) == "tiles"
-    assert r.bins_needed() == 5
+    assert r.match("3001", 0, lambda category, entry: 0).category == "identified, not wanted"
+    assert r.category_of("3020", 4) == "parts for a build"
+    assert r.entries("parts for a build")[EntryKey("3020", None)] == 4
+    assert r.unreachable() == ()
+    assert r.bins_needed() == 7
