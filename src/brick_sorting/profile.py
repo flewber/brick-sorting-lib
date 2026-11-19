@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import warnings
+
 import yaml
 
 DEFAULT_PRIORITY = 256
@@ -33,6 +35,10 @@ _REJECT_KEYS = {"parts", "colors"}
 
 class ProfileError(ValueError):
     """The profile cannot be used. The message says what to fix."""
+
+
+class ProfileWarning(UserWarning):
+    """The profile can be used, but something in it deserves a look."""
 
 
 @dataclass(frozen=True)
@@ -160,6 +166,13 @@ def _category(entry: Any, position: int, default_scheme: str) -> Category:
             raise ProfileError(f"{where}: 'set' must be a set number in quotes, such as \"10497-1\"")
         if {"parts", "part_categories", "categories"} & accept.keys():
             raise ProfileError(f"{where}: a 'set' category cannot also list parts or categories")
+        warnings.warn(
+            f"{where}: 'accept: {{set: ...}}' is deprecated and will be removed in a later "
+            "version. It now wants the set's quantities, like a list category. Import the set "
+            "as a 'list' category instead, so the quantities are written in the profile.",
+            ProfileWarning,
+            stacklevel=3,
+        )
 
     parts = frozenset(_strings(accept, "parts", where))
     part_categories = tuple(_strings(accept, "part_categories", where))

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from brick_sorting import CsvCatalog, ProfileError, compile_profile, load_profile
+from brick_sorting import CsvCatalog, EntryKey, Match, ProfileError, ProfileWarning, compile_profile, load_profile
 
 RED, BLUE, BLACK = 4, 1, 0
 
@@ -216,6 +216,7 @@ categories:
         ("categories:\n  - name: a\n    accept: {set: \"9999-1\"}", "no set '9999-1'"),
     ],
 )
+@pytest.mark.filterwarnings("ignore::brick_sorting.ProfileWarning")
 def test_mistakes_are_refused_with_a_message_that_names_them(text, message):
     with pytest.raises(ProfileError, match=message):
         resolver(text)
@@ -238,7 +239,8 @@ categories:
 
 
 def test_set_category_accepts_exactly_the_sets_parts_in_the_sets_colors():
-    r = resolver("""
+    with pytest.warns(ProfileWarning, match="'my set'.*deprecated"):
+        r = resolver("""
 categories:
   - name: my set
     priority: 0
@@ -251,6 +253,20 @@ categories:
     assert r.category_of("3001", BLUE) == "bricks"
     assert r.category_of("3020", BLUE) == "my set"
     assert r.category_of("3020", RED) is None
+
+
+def test_deprecated_set_category_wants_the_sets_quantities():
+    with pytest.warns(ProfileWarning, match="Import the set as a 'list'"):
+        r = resolver("""
+categories:
+  - name: my set
+    priority: 0
+    accept: {set: "1234-1"}
+""")
+    assert r.entries("my set") == {EntryKey("3001", RED): 2, EntryKey("3020", BLUE): 1}
+    key = EntryKey("3001", RED)
+    assert r.match("3001", RED, lambda c, e: 1) == Match("my set", key)
+    assert r.match("3001", RED, lambda c, e: 0) is None
 
 
 def test_unknown_color_gets_an_answer_only_when_color_cannot_matter():
