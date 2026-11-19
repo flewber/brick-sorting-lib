@@ -12,7 +12,7 @@ the category. A typo must never silently change what gets sorted where.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,7 @@ SUPPORTED_NAMING_SCHEMES = ("Rebrickable",)
 ANY = "any"
 
 _TOP_KEYS = {"name", "default_naming_scheme", "categories", "overflow_bins"}
-_CATEGORY_KEYS = {"name", "priority", "naming_scheme", "accept", "reject", "list", "catch_all"}
+_CATEGORY_KEYS = {"name", "priority", "naming_scheme", "accept", "reject", "list", "catch_all", "unreachable_ok"}
 _KINDS = ("accept", "list", "catch_all")
 _LIST_KEYS = {"source", "entries"}
 _ENTRY_KEYS = {"part", "color", "quantity"}
@@ -73,6 +73,9 @@ class Category:
     source: Any = None
     # Accepts every piece no category above it accepted.
     catch_all: bool = False
+    # "I meant this": the categories that shadowed this one when the
+    # user accepted that it can never receive a piece. None if not given.
+    unreachable_ok: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -142,6 +145,13 @@ def _category(entry: Any, position: int, default_scheme: str) -> Category:
         )
     if "reject" in entry and "accept" not in entry:
         raise ProfileError(f"{where}: 'reject' is only allowed next to 'accept'")
+    category = _category_of_kind(entry, name, priority, where)
+    if "unreachable_ok" in entry:
+        category = replace(category, unreachable_ok=_unreachable_ok(entry["unreachable_ok"], where))
+    return category
+
+
+def _category_of_kind(entry: Mapping[str, Any], name: str, priority: int, where: str) -> Category:
     if "list" in entry:
         return _list_category(entry["list"], name, priority, where)
     if "catch_all" in entry:
@@ -171,7 +181,7 @@ def _category(entry: Any, position: int, default_scheme: str) -> Category:
             "version. It now wants the set's quantities, like a list category. Import the set "
             "as a 'list' category instead, so the quantities are written in the profile.",
             ProfileWarning,
-            stacklevel=3,
+            stacklevel=4,
         )
 
     parts = frozenset(_strings(accept, "parts", where))
@@ -191,6 +201,21 @@ def _category(entry: Any, position: int, default_scheme: str) -> Category:
         rejected_parts=frozenset(_strings(reject, "parts", where)),
         rejected_colors=tuple(_color_list(reject, where)),
     )
+
+
+def _unreachable_ok(value: Any, where: str) -> frozenset[str]:
+    hint = "write it as 'unreachable_ok: {shadowed_by: [names of the categories above]}'"
+    if not isinstance(value, Mapping):
+        raise ProfileError(f"{where}: {hint}")
+    _check_keys(value, {"shadowed_by"}, f"{where}, unreachable_ok")
+    names = value.get("shadowed_by")
+    if (
+        not isinstance(names, list)
+        or not names
+        or not all(isinstance(name, str) for name in names)
+    ):
+        raise ProfileError(f"{where}: {hint}")
+    return frozenset(names)
 
 
 def _list_category(section: Any, name: str, priority: int, where: str) -> Category:

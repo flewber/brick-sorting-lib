@@ -16,3 +16,5 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# A test that expects a profile warning says so.
+filterwarnings = ["error::brick_sorting.ProfileWarning"]

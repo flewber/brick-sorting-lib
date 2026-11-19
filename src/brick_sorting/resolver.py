@@ -12,12 +12,14 @@ who passes it to `match` on every call.
 
 from __future__ import annotations
 
+import copy
+import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from brick_sorting.catalog import Catalog
-from brick_sorting.profile import Category, Profile, ProfileError
+from brick_sorting.profile import Category, Profile, ProfileError, ProfileWarning
 
 
 class EntryKey(NamedTuple):
@@ -38,6 +40,49 @@ class Match:
 
 # wanted(category, entry): how many more pieces that entry still wants.
 Wanted = Callable[[str, EntryKey], int]
+
+
+@dataclass(frozen=True)
+class Unreachable:
+    """A category that can never receive a piece, because categories with
+    a lower priority number accept everything it accepts."""
+
+    category: str
+    shadowed_by: tuple[str, ...]  # in priority order
+    acknowledged: bool  # the profile's unreachable_ok names exactly these
+
+
+class _Colors(NamedTuple):
+    """The colors a category accepts for one part. `everything_but` True
+    means every color except `colors`; False means just `colors`."""
+
+    everything_but: bool
+    colors: frozenset[int]
+
+    def overlaps(self, other: _Colors) -> bool:
+        if self.everything_but and other.everything_but:
+            return True  # two cofinite sets of an open-ended color list
+        if self.everything_but:
+            return bool(other.colors - self.colors)
+        if other.everything_but:
+            return bool(self.colors - other.colors)
+        return bool(self.colors & other.colors)
+
+    def within(self, other: _Colors) -> bool:
+        if self.everything_but:
+            # Nothing finite covers every color but a few.
+            return other.everything_but and other.colors <= self.colors
+        if other.everything_but:
+            return not (self.colors & other.colors)
+        return self.colors <= other.colors
+
+
+def _union(sets: list[_Colors]) -> _Colors:
+    finite = frozenset().union(*(s.colors for s in sets if not s.everything_but))
+    open_ended = [s.colors for s in sets if s.everything_but]
+    if not open_ended:
+        return _Colors(False, finite)
+    return _Colors(True, frozenset.intersection(*open_ended) - finite)
 
 
 @dataclass(frozen=True)
@@ -62,6 +107,20 @@ class _Compiled:
             and color not in self.rejected_colors
             and (self.colors is None or color in self.colors)
         )
+
+    def colors_for(self, part: str) -> _Colors | None:
+        """The colors this category accepts for a part, wants ignored."""
+        if self.kind == "catch_all":
+            return _Colors(True, frozenset())
+        if part not in self.parts:
+            return None
+        if self.kind == "list":
+            if (part, None) in self.entries:
+                return _Colors(True, frozenset())
+            return _Colors(False, frozenset(k.color for k in self.entries if k.part == part))
+        if self.colors is None:
+            return _Colors(True, self.rejected_colors)
+        return _Colors(False, self.colors - self.rejected_colors)
 
     def match(self, part: str, color: int | None, wanted: Wanted) -> Match | None | bool:
         """A Match if this category takes the piece; False if it might,
@@ -94,6 +153,7 @@ class Resolver:
         self._by_name = {category.name: category for category in compiled}
         # Category names in profile order. One sort bin each.
         self.categories = tuple(category.name for category in profile.categories)
+        self._unreachable = self._find_unreachable()
 
     def match(self, part: str | int, color: int | None, wanted: Wanted) -> Match | None:
         """The category that takes this piece now, or None if none does.
@@ -140,6 +200,56 @@ class Resolver:
 
     def _full_quantity(self, category: str, entry: EntryKey) -> int:
         return self._by_name[category].entries[entry]
+
+    def unreachable(self) -> tuple[Unreachable, ...]:
+        """Categories that can never receive a piece, because categories
+        with lower priority numbers accept every piece they accept.
+
+        Wants are ignored, and a list never shadows anything, since it
+        can run out and let pieces through. A list below a rule category
+        that accepts all of its entries is reported. Partial overlap (red 2x4
+        above any 2x4) is the normal way to write a profile and is never
+        reported. `shadowed_by` names every category above that accepts
+        some piece this one accepts. `acknowledged` is True when the
+        profile's `unreachable_ok` names exactly those categories, so a
+        change in what shadows a category brings the warning back.
+        """
+        return self._unreachable
+
+    def stale_acknowledgments(self) -> tuple[str, ...]:
+        """Categories with `unreachable_ok` that are reachable after all.
+        The acknowledgment does nothing there and can be removed."""
+        unreachable = {item.category for item in self._unreachable}
+        return tuple(
+            category.name for category in self.profile.categories
+            if category.unreachable_ok is not None and category.name not in unreachable
+        )
+
+    def _find_unreachable(self) -> tuple[Unreachable, ...]:
+        acknowledged = {c.name: c.unreachable_ok for c in self.profile.categories}
+        found = []
+        for index, category in enumerate(self._by_priority):
+            if category.kind == "catch_all":
+                continue  # it takes pieces no other category knows of
+            # A list can run out and let pieces through, so it never
+            # shadows anything.
+            above = [other for other in self._by_priority[:index] if other.kind != "list"]
+            shadows: set[str] = set()
+            covered = True
+            for part in category.parts:
+                mine = category.colors_for(part)
+                theirs = []
+                for other in above:
+                    colors = other.colors_for(part)
+                    if colors is not None and colors.overlaps(mine):
+                        theirs.append(colors)
+                        shadows.add(other.name)
+                if covered and not mine.within(_union(theirs)):
+                    covered = False
+            if covered:
+                names = tuple(other.name for other in above if other.name in shadows)
+                found.append(Unreachable(category.name, names, acknowledged[category.name] == set(names)))
+        return tuple(found)
 
     def bins_needed(self) -> int:
         """Sort bins this profile uses: one per category, plus overflow bins."""
@@ -244,10 +354,40 @@ def compile_profile(profile: Profile, catalog: Catalog) -> Resolver:
             compiled.append(_Compiled(category.name, category.priority, "list", parts, entries=entries))
             continue
         parts = parts_of(category, ())
-        if not parts:
-            raise ProfileError(f"category '{category.name}' accepts no piece at all")
         colors = None if category.colors is None else color_ids(category, category.colors)
         rejected = color_ids(category, category.rejected_colors)
+        if not parts or (colors is not None and not colors - rejected):
+            raise ProfileError(f"category '{category.name}' accepts no piece at all")
         compiled.append(_Compiled(category.name, category.priority, "accept", parts, colors, rejected))
 
-    return Resolver(profile, compiled)
+    resolver = Resolver(profile, compiled)
+    for item in resolver.unreachable():
+        if not item.acknowledged:
+            names = ", ".join(f"'{name}'" for name in item.shadowed_by)
+            warnings.warn(
+                f"category '{item.category}' can never receive a piece: everything it accepts "
+                f"is taken first by {names}. If that is meant, acknowledge it with "
+                f"'unreachable_ok: {{shadowed_by: [{', '.join(item.shadowed_by)}]}}'.",
+                ProfileWarning,
+                stacklevel=2,
+            )
+    for name in resolver.stale_acknowledgments():
+        warnings.warn(
+            f"category '{name}' has 'unreachable_ok' but can receive pieces; remove it.",
+            ProfileWarning,
+            stacklevel=2,
+        )
+    return resolver
+
+
+def acknowledge_unreachable(document: Mapping[str, Any], item: Unreachable) -> dict[str, Any]:
+    """A copy of a profile mapping (as parsed from YAML) in which the
+    unreachable category says "I meant this", naming the categories that
+    shadow it now. The original mapping is not changed. Saving it, and
+    keeping any comments, is up to the caller."""
+    result = copy.deepcopy(dict(document))
+    for category in result.get("categories") or ():
+        if isinstance(category, dict) and category.get("name") == item.category:
+            category["unreachable_ok"] = {"shadowed_by": list(item.shadowed_by)}
+            return result
+    raise ProfileError(f"the profile has no category named '{item.category}'")

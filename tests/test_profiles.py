@@ -143,6 +143,7 @@ categories:
 """)
 
 
+@pytest.mark.filterwarnings("ignore:.*can never receive")
 def test_including_categories_in_any_order_and_through_a_diamond():
     r = resolver("""
 categories:
@@ -166,6 +167,7 @@ categories:
     assert r.category_of("3010", BLUE) == "left"
 
 
+@pytest.mark.filterwarnings("ignore:.*can never receive")
 def test_an_included_categorys_own_rejects_carry_over():
     r = resolver("""
 categories:
@@ -213,6 +215,7 @@ categories:
         ("categories:\n  - name: a\n    accept: {categories: [ghost]}", "'ghost'"),
         ("categories:\n  - name: a\n    accept: {parts: [1], colors: [Mauve]}", "no color 'Mauve'"),
         ("categories:\n  - name: a\n    accept: {parts: [1]}\n    reject: {parts: [1]}", "accepts no piece"),
+        ("categories:\n  - name: a\n    accept: {parts: [1], colors: [Red]}\n    reject: {colors: [4]}", "accepts no piece"),
         ("categories:\n  - name: a\n    accept: {set: \"9999-1\"}", "no set '9999-1'"),
     ],
 )
