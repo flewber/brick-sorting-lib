@@ -23,13 +23,26 @@ SUPPORTED_NAMING_SCHEMES = ("Rebrickable",)
 ANY = "any"
 
 _TOP_KEYS = {"name", "default_naming_scheme", "categories", "overflow_bins"}
-_CATEGORY_KEYS = {"name", "priority", "naming_scheme", "accept", "reject"}
+_CATEGORY_KEYS = {"name", "priority", "naming_scheme", "accept", "reject", "list", "catch_all"}
+_KINDS = ("accept", "list", "catch_all")
+_LIST_KEYS = {"source", "entries"}
+_ENTRY_KEYS = {"part", "color", "quantity"}
 _ACCEPT_KEYS = {"parts", "part_categories", "categories", "colors", "set", "min_price"}
 _REJECT_KEYS = {"parts", "colors"}
 
 
 class ProfileError(ValueError):
     """The profile cannot be used. The message says what to fix."""
+
+
+@dataclass(frozen=True)
+class ListEntry:
+    """One line of a list category: how many of a part in a color it wants."""
+
+    part: str
+    # Color name or id as written. None means any color.
+    color: str | int | None
+    quantity: int
 
 
 @dataclass(frozen=True)
@@ -48,6 +61,12 @@ class Category:
     set: str | None = None
     rejected_parts: frozenset[str] = frozenset()
     rejected_colors: tuple[str | int, ...] = ()
+    # A list category: its entries, or None for any other kind.
+    entries: tuple[ListEntry, ...] | None = None
+    # Where a list came from (a set, an order file). Kept, not interpreted.
+    source: Any = None
+    # Accepts every piece no category above it accepted.
+    catch_all: bool = False
 
 
 @dataclass(frozen=True)
@@ -84,6 +103,7 @@ def load_profile(source: str | Path | Mapping[str, Any]) -> Profile:
         categories.append(category)
 
     _refuse_equal_priorities(categories)
+    _catch_all_comes_last(categories)
 
     overflow = document.get("overflow_bins", 0)
     if not isinstance(overflow, int) or isinstance(overflow, bool) or overflow < 0:
@@ -107,6 +127,21 @@ def _category(entry: Any, position: int, default_scheme: str) -> Category:
     priority = entry.get("priority", DEFAULT_PRIORITY)
     if not isinstance(priority, int) or isinstance(priority, bool) or priority < 0:
         raise ProfileError(f"{where}: 'priority' must be a whole number, 0 or more")
+
+    kinds = [kind for kind in _KINDS if kind in entry]
+    if len(kinds) != 1:
+        found = f"has {' and '.join(kinds)}" if kinds else "has none"
+        raise ProfileError(
+            f"{where}: needs exactly one of 'accept', 'list' or 'catch_all' ({found})"
+        )
+    if "reject" in entry and "accept" not in entry:
+        raise ProfileError(f"{where}: 'reject' is only allowed next to 'accept'")
+    if "list" in entry:
+        return _list_category(entry["list"], name, priority, where)
+    if "catch_all" in entry:
+        if entry["catch_all"] is not True:
+            raise ProfileError(f"{where}: 'catch_all' must be true; remove it if unused")
+        return Category(name=name, priority=priority, catch_all=True)
 
     accept = entry.get("accept")
     if not isinstance(accept, Mapping) or not accept:
@@ -145,6 +180,40 @@ def _category(entry: Any, position: int, default_scheme: str) -> Category:
     )
 
 
+def _list_category(section: Any, name: str, priority: int, where: str) -> Category:
+    if not isinstance(section, Mapping):
+        raise ProfileError(f"{where}: 'list' must be a mapping with 'entries'")
+    _check_keys(section, _LIST_KEYS, f"{where}, list")
+    raw = section.get("entries")
+    if not isinstance(raw, list) or not raw:
+        raise ProfileError(f"{where}: 'entries' must be a list with at least one entry")
+    entries = []
+    for number, item in enumerate(raw, start=1):
+        at = f"{where}, entry {number}"
+        if not isinstance(item, Mapping):
+            raise ProfileError(f"{at}: must be a mapping with 'part', 'color' and 'quantity'")
+        _check_keys(item, _ENTRY_KEYS, at)
+        missing = [key for key in ("part", "color", "quantity") if key not in item]
+        if missing:
+            raise ProfileError(f"{at}: needs {', '.join(missing)} (write 'color: any' for any color)")
+        part, color, quantity = item["part"], item["color"], item["quantity"]
+        if isinstance(part, bool) or not isinstance(part, (str, int)) or part == "":
+            raise ProfileError(f"{at}: 'part' must be a part number")
+        if isinstance(color, bool) or not isinstance(color, (str, int)):
+            raise ProfileError(f"{at}: 'color' must be a color name, id or 'any'")
+        if isinstance(color, str) and color.lower() == ANY:
+            color = None
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+            raise ProfileError(f"{at}: 'quantity' must be a whole number, 1 or more")
+        entries.append(ListEntry(str(part), color, quantity))
+    return Category(
+        name=name,
+        priority=priority,
+        entries=tuple(entries),
+        source=section.get("source"),
+    )
+
+
 def _refuse_equal_priorities(categories: list[Category]) -> None:
     """Every category needs its own priority number, so the order in
     which categories are tried never depends on anything but the profile."""
@@ -168,6 +237,16 @@ def _refuse_equal_priorities(categories: list[Category]) -> None:
             f"{category.priority}{default}. Every category needs its own priority; "
             f"{free} is free."
         )
+
+
+def _catch_all_comes_last(categories: list[Category]) -> None:
+    for catch_all in (category for category in categories if category.catch_all):
+        for other in categories:
+            if other is not catch_all and other.priority > catch_all.priority:
+                raise ProfileError(
+                    f"catch-all category '{catch_all.name}' must have the largest priority "
+                    f"number, but '{other.name}' has {other.priority}"
+                )
 
 
 def _check_keys(mapping: Mapping[str, Any], known: set[str], where: str) -> None:
