@@ -102,8 +102,8 @@ categories:
     assert r.category_of("3004", RED) == "everything brick"
 
 
-def test_same_priority_claiming_the_same_piece_is_an_error_with_an_example():
-    with pytest.raises(ProfileError, match="'a' and 'b'.*part 3001"):
+def test_equal_priorities_are_an_error_naming_both_and_a_free_number():
+    with pytest.raises(ProfileError, match="'a' and 'b' both have priority 2.*3 is free"):
         resolver("""
 categories:
   - name: a
@@ -115,8 +115,10 @@ categories:
 """)
 
 
-def test_same_priority_is_fine_when_colors_keep_them_apart():
-    r = resolver("""
+def test_equal_priorities_are_an_error_even_when_colors_keep_them_apart():
+    # Before 0.2.0 this was allowed, since no piece could go to both.
+    with pytest.raises(ProfileError, match="'red bricks' and 'blue bricks'.*4 is free"):
+        resolver("""
 categories:
   - name: red bricks
     priority: 2
@@ -124,8 +126,21 @@ categories:
   - name: blue bricks
     priority: 2
     accept: {part_categories: [Bricks], colors: [Blue]}
+  - name: plates
+    priority: 3
+    accept: {part_categories: [Plates]}
 """)
-    assert r.category_of("3001", BLUE) == "blue bricks"
+
+
+def test_at_most_one_category_may_leave_priority_out():
+    with pytest.raises(ProfileError, match="'a' and 'b' both have priority 256.*left out"):
+        resolver("""
+categories:
+  - name: a
+    accept: {parts: [3001]}
+  - name: b
+    accept: {parts: [3020]}
+""")
 
 
 def test_including_categories_in_any_order_and_through_a_diamond():

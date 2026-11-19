@@ -1,8 +1,8 @@
 """Reading a sorting profile and checking that it is well formed.
 
 A profile is a list of categories. Each category says which pieces it
-accepts and has a priority; a piece belongs to the accepting category
-with the lowest priority number.
+accepts and has a priority of its own; a piece belongs to the accepting
+category with the lowest priority number.
 
 Everything a profile can get wrong on its own (a misspelled key, an
 empty field, a duplicate name) is refused here with a message that names
@@ -83,6 +83,8 @@ def load_profile(source: str | Path | Mapping[str, Any]) -> Profile:
         seen.add(category.name)
         categories.append(category)
 
+    _refuse_equal_priorities(categories)
+
     overflow = document.get("overflow_bins", 0)
     if not isinstance(overflow, int) or isinstance(overflow, bool) or overflow < 0:
         raise ProfileError("'overflow_bins' must be a whole number, 0 or more")
@@ -141,6 +143,31 @@ def _category(entry: Any, position: int, default_scheme: str) -> Category:
         rejected_parts=frozenset(_strings(reject, "parts", where)),
         rejected_colors=tuple(_color_list(reject, where)),
     )
+
+
+def _refuse_equal_priorities(categories: list[Category]) -> None:
+    """Every category needs its own priority number, so the order in
+    which categories are tried never depends on anything but the profile."""
+    used = {category.priority for category in categories}
+    first_with: dict[int, Category] = {}
+    for category in categories:
+        other = first_with.setdefault(category.priority, category)
+        if other is category:
+            continue
+        free = category.priority + 1
+        while free in used:
+            free += 1
+        default = (
+            f" ({DEFAULT_PRIORITY} is the default when 'priority' is left out; "
+            "at most one category may leave it out)"
+            if category.priority == DEFAULT_PRIORITY
+            else ""
+        )
+        raise ProfileError(
+            f"categories '{other.name}' and '{category.name}' both have priority "
+            f"{category.priority}{default}. Every category needs its own priority; "
+            f"{free} is free."
+        )
 
 
 def _check_keys(mapping: Mapping[str, Any], known: set[str], where: str) -> None:

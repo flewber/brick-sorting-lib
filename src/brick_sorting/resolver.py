@@ -1,8 +1,7 @@
 """Turning a profile plus a catalog into answers.
 
 `compile_profile` checks everything that needs the catalog (unknown part
-categories and colors, categories that include each other in a circle,
-two categories of equal priority that could both claim the same piece)
+categories and colors, categories that include each other in a circle)
 and returns a `Resolver`. After that, `category_of` cannot fail.
 """
 
@@ -150,41 +149,5 @@ def compile_profile(profile: Profile, catalog: Catalog) -> Resolver:
             raise ProfileError(f"category '{category.name}' accepts no piece at all")
         compiled.append(_Compiled(category.name, category.priority, parts, colors, rejected, pairs))
 
-    _refuse_ties(compiled)
     return Resolver(profile, compiled)
 
-
-def _example_overlap(a: _Compiled, b: _Compiled) -> str | None:
-    """A piece both categories would accept, described for a message, or None."""
-    if a.pairs is not None or b.pairs is not None:
-        first, second = (a, b) if a.pairs is not None else (b, a)
-        for part, color in sorted(first.pairs):
-            if second.accepts(part, color):
-                return f"part {part} in color {color}"
-        return None
-    shared = a.parts & b.parts
-    if not shared:
-        return None
-    part = min(shared)
-    if a.colors is None and b.colors is None:
-        # Both take any color. Rejected colors only remove a few, so
-        # they still share nearly every color.
-        return f"part {part}"
-    candidates = a.colors if a.colors is not None else b.colors
-    for color in sorted(candidates):
-        if a.accepts(part, color) and b.accepts(part, color):
-            return f"part {part} in color {color}"
-    return None
-
-
-def _refuse_ties(compiled: list[_Compiled]) -> None:
-    for index, a in enumerate(compiled):
-        for b in compiled[index + 1:]:
-            if a.priority != b.priority:
-                continue
-            example = _example_overlap(a, b)
-            if example is not None:
-                raise ProfileError(
-                    f"categories '{a.name}' and '{b.name}' have the same priority ({a.priority}) "
-                    f"and both accept {example}. Give one of them a different priority."
-                )
