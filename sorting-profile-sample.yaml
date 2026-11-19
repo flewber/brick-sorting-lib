@@ -1,7 +1,9 @@
 # Example sorting profile.
 #
 # A profile is a list of categories, each with a priority number of its
-# own. A piece goes to the accepting category with the lowest number. A piece that no category
+# own. A piece goes to the accepting category with the lowest number.
+# A category has exactly one of 'accept' (rules), 'list' (wanted
+# quantities) or 'catch_all: true'. A piece that no category
 # accepts is rejected. Misspelled keys are errors, not ignored.
 
 name: sample
@@ -37,6 +39,19 @@ categories:
     accept:
       categories: [bricks, tiles]  # everything those two categories accept
       colors: [Red]
+
+  - name: parts for a build
+    priority: 4
+    list:                          # wants: each entry takes pieces until its
+      source: {note: "for a build"}  # quantity is delivered, then the next
+      entries:                     # category by priority gets them
+        - {part: "3001", color: Black, quantity: 10}
+        - {part: "3004", color: Black, quantity: 6}
+        - {part: "3020", color: any, quantity: 4}   # any color, counted together
+
+  - name: identified, not wanted   # every piece no category above took;
+    priority: 10                   # must have the largest priority number
+    catch_all: true
 
 # Bins kept free for overflow from full bins. Categories plus overflow
 # bins may not exceed the number of sort bins on the machine.

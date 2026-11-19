@@ -317,7 +317,11 @@ def test_sample_profile_loads_against_csv_files(tmp_path):
     r = compile_profile(load_profile(sample), CsvCatalog(tmp_path))
     assert r.category_of("3001", 4) == "bricks and tiles in red"
     assert r.category_of("3001", 1) == "blue 2x4 and 1x2 bricks"
-    assert r.category_of("3001", 0) is None
-    assert r.category_of("101645", 4) is None
+    assert r.category_of("3001", 0) == "parts for a build"
+    assert r.category_of("101645", 4) == "identified, not wanted"
     assert r.category_of("3070b", 0) == "tiles"
-    assert r.bins_needed() == 5
+    assert r.match("3001", 0, lambda category, entry: 0).category == "identified, not wanted"
+    assert r.category_of("3020", 4) == "parts for a build"
+    assert r.entries("parts for a build")[EntryKey("3020", None)] == 4
+    assert r.unreachable() == ()
+    assert r.bins_needed() == 7

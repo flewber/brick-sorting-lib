@@ -1,6 +1,6 @@
 [project]
 name = "brick-sorting"
-version = "0.1.0"
+version = "0.2.0"
 description = "Sorting profiles for brick sorting: which category does a part in a color belong to?"
 readme = "README.md"
 license = "MIT"
